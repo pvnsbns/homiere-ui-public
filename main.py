@@ -288,12 +288,10 @@ def display_property_listing(row, relevance_explanation, relevance_rank, summary
     # def click_view_listing_details():
     #     st.session_state.clicked = True
     def click_view_listing_details(row_list_number):
-        # print('at callback', row_list_number)
         clicked_row = st.session_state.properties_df[st.session_state.properties_df['List Number'] == row_list_number]
         st.session_state.clicked = True
         # st.session_state.selected_listing_id = str(row['List Number'])
         st.session_state.selected_listing_id = row_list_number
-        # print("selected_listing_id", st.session_state.selected_listing_id)
         # st.session_state.selected_property_summary = summary
         st.session_state.selected_property_summary = str(clicked_row['Summary'].values[0])
         # st.session_state.selected_property_relevance = relevance_explanation
@@ -304,9 +302,7 @@ def display_property_listing(row, relevance_explanation, relevance_rank, summary
     # st.session_state.listing_buttons_list.append(st.button('View Listing Details Here', key=f"view_{row['List Number']}"))
 
     # if st.button("View Listing Details", key=f"view_{row['List Number']}"):
-    # print('here1')
     if st.session_state.clicked:
-        # print('here2')
         # Update session state when the button is pressed
         # st.session_state.selected_listing_id = str(row['List Number'])
         # st.session_state.selected_property_summary = summary
@@ -314,7 +310,6 @@ def display_property_listing(row, relevance_explanation, relevance_rank, summary
 
         # Navigate to the details page
         st.switch_page("pages/property_details.py")
-    # print('here3')
 
     with listing_col:
         st.markdown(f"""
@@ -495,52 +490,6 @@ def display_paginated_listings(properties_df, summaries, relevance_explanations,
     
     # Return the current display data for use in the map
     return st.session_state[search_results_key] if st.session_state[search_results_key] is not None else properties_df
-
-
-def is_valid_schema(results):
-    try:
-        # Check if the top-level structure is correct
-        if not isinstance(results, dict) or not {"listings", "conclusion"}.issubset(results.keys()):
-            print('here1')
-            return False
-                    
-        # Validate conclusion field
-        if not isinstance(results["conclusion"], str):
-            print('here2')
-            return False
-                    
-        # Validate listings array
-        if not isinstance(results["listings"], list):
-            print('here3')
-            return False
-                    
-        # Validate each listing item
-        for listing in results["listings"]:
-            required_fields = {"ID", "summary", "relevance_explanation", "relevance_rank_score"}
-                        
-            # Check if all required fields exist
-            if not required_fields.issubset(listing.keys()):
-                print('here4')
-                return False
-                            
-            # Check field types
-            if not isinstance(listing["ID"], str):
-                print('here5')
-                return False
-            if not isinstance(listing["summary"], str):
-                print('here6')
-                return False
-            if not isinstance(listing["relevance_explanation"], str):
-                print('here7')
-                return False
-            # if not isinstance(listing["relevance_rank_score"], (int, float)):
-            #     print('here8')
-            #     return False
-                            
-        return True
-    except Exception:
-        print('here9')
-        return False
     
 # for i, button in enumerate(st.session_state.listing_buttons_list):
 #     if button:
@@ -685,22 +634,12 @@ if st.button("Submit"):
                 relevance_ranks = {}
                 conclusion = "No conclusion available. Please submit a longer query"
 
-                # print(llm_results)
-
                 if llm_results:
                     listings = llm_results.get('listings', {})
                     if listings:
                         listing_ids = [listing['ID'] for listing in listings if 'ID' in listing]
                         summaries = {listing['ID']: listing.get('summary', 'No summary available') for listing in listings if 'ID' in listing}
-                        # print()
-                        # print("SUMMARIES:")
-                        # print(summaries)
-                        # print()
                         relevance_explanations = {listing['ID']: listing.get('relevance_explanation', 'No LLM reasoning available') for listing in listings if 'ID' in listing}
-                        # print()
-                        # print("RELEVANCE EXP:")
-                        # print(relevance_explanations)
-                        # print()
 
                         relevance_ranks = {}
                         for listing in listings:
@@ -715,17 +654,8 @@ if st.button("Submit"):
                                 rank = 99
                             relevance_ranks[listing_id] = rank
 
-                        # print()
-                        # print("RELEVANCE RANK:")
-                        # print(relevance_ranks)
-                        # print()
-
                         conclusion = llm_results.get("conclusion", "No conclusion available")
 
-                        # print()
-                        # print("CONCLUSION:")
-                        # print(conclusion)
-                        # print()
                         st.session_state.conclusion = conclusion
 
                         properties_df = st.session_state.map_data.loc[st.session_state.map_data['List Number'].isin(listing_ids)].copy()
@@ -750,8 +680,6 @@ if st.button("Submit"):
                         
                         # st.session_state.properties_df = st.session_state.map_data.loc[st.session_state.map_data['List Number'].isin(listing_ids)].copy()
                         st.session_state.properties_df = result_sorted
-                        # print()
-                        # print(st.session_state.properties_df)
 
                 else:
                     st.error("Failed to retrieve valid results. Please refresh and resubmit your query.")
