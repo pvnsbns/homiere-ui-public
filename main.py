@@ -51,6 +51,8 @@ if "map_data" not in st.session_state:
     st.session_state.map_data = None
 if "text_data" not in st.session_state:
     st.session_state.text_data = None
+if  "property_data" not in st.session_state:
+    st.session_state.property_data = None
 if "refresh_chat" not in st.session_state:
     st.session_state.refresh_chat = False
 if "properties_df" not in st.session_state:
@@ -79,8 +81,6 @@ if 'clicked_property' not in st.session_state:
     st.session_state.clicked_property = ""
 if 'listing_buttons_list' not in st.session_state:
     st.session_state.listing_buttons_list = []
-
-
 
 # Function to load data from S3
 # @st.cache_data(show_spinner=False)
@@ -123,6 +123,27 @@ def load_text_data():
         except Exception as e:
             st.error(f"Error loading text data from S3: {e}")
             st.session_state.text_data = pd.DataFrame()
+
+def load_property_data():
+    """Load additional property data (processed_tabular.parquet) from S3."""
+    if st.session_state.property_data is None:
+        try:
+            s3_client = boto3.client(
+                "s3",
+                aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
+                aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"],
+                region_name=st.secrets["REGION_NAME"]
+            )
+            bucket_name = "homierebucket"
+            processed_tabular_key = "processed_tabular.parquet"
+            processed_tabular_response = s3_client.get_object(Bucket=bucket_name, Key=processed_tabular_key)
+            processed_tabular_parquet = processed_tabular_response["Body"].read()
+            
+            selected_columns = ['List Number', 'Year Built', 'Parsed Features', 'property_condition', 'price_per_sqft', 'price_diff_from_city_avg', 'monthly_mortgage', 'days_on_market', 'type']
+            st.session_state.property_data = pd.read_parquet(io.BytesIO(processed_tabular_parquet), engine="pyarrow", columns=selected_columns)
+        except Exception as e:
+            st.error(f"Error loading additional property data from S3: {e}")
+            st.session_state.property_data = pd.DataFrame()
 
 # Need to load map first, then can grab text data after so user doesn't have to wait for map to render
 load_map_data()
@@ -316,10 +337,6 @@ def display_property_listing(row, relevance_explanation, relevance_rank, summary
         **{row['Address']}, {row['City']}, {row['State']} {row['Zip']}**
          
         **${safe_int(row['List Price']):,}** - {safe_int(row['Total Bedrooms'])} beds | {safe_int(row['Total Bathrooms'])} baths | {safe_int(row['Total Sqft'])} Sqft
-
-        **List Number**: {row['List Number']}  
-        
-        **Relevance Rank:** {relevance_rank}
         
         **LLM Reasoning:**  
         {relevance_explanation}  
@@ -713,13 +730,13 @@ if st.button("Submit"):
 
             else:
                 st.error(f"Failed to send data. Status code: {response.status_code}")
-
-
+    
+    if "property_data" not in st.session_state:
+        load_property_data()
 
 if not st.session_state.search_triggered:
     render_map(st.session_state.map_data)
 
 load_text_data()
-
-    
+load_property_data()
 st.divider()

@@ -100,9 +100,9 @@ def translate_filters(user_filters):
     if user_filters['city'] not in ["Any", ""]:
         pinecone_filters['city'] = user_filters['city'].title()
     if user_filters['type'] != "Any":
-        pinecone_filters['type'] = user_filters['type']
+        pinecone_filters['type'] = user_filters['type'].lower()
     if user_filters['property_condition'] != "Any":
-        pinecone_filters['property_condition'] = user_filters['property_condition']
+        pinecone_filters['property_condition'] = user_filters['property_condition'].lower()
     return pinecone_filters
 
 # define a function to load OpenAI API key from a file
