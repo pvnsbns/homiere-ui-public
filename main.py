@@ -99,7 +99,7 @@ def load_map_data():
             processed_tabular_response = s3_client.get_object(Bucket=bucket_name, Key=processed_tabular_key)
             processed_tabular_parquet = processed_tabular_response["Body"].read()
             
-            selected_columns = ['Geo Latitude', 'Geo Longitude', 'List Number', 'Address', 'City', 'State', 'Zip', 'Total Sqft', 'List Price', 'Total Bedrooms', 'Total Bathrooms', 'Photo URL']
+            selected_columns = ['Geo Latitude', 'Geo Longitude', 'List Number', 'Address', 'City', 'State', 'Zip', 'Total Sqft', 'List Price', 'Total Bedrooms', 'Total Bathrooms', 'Photo URL', 'caption']
             st.session_state.map_data = pd.read_parquet(io.BytesIO(processed_tabular_parquet), engine="pyarrow", columns=selected_columns)
         except Exception as e:
             st.error(f"Error loading map data from S3: {e}")
@@ -139,7 +139,7 @@ def load_property_data():
             processed_tabular_response = s3_client.get_object(Bucket=bucket_name, Key=processed_tabular_key)
             processed_tabular_parquet = processed_tabular_response["Body"].read()
             
-            selected_columns = ['List Number', 'Year Built', 'Parsed Features', 'property_condition', 'price_per_sqft', 'price_diff_from_city_avg', 'monthly_mortgage', 'days_on_market', 'type']
+            selected_columns = ['List Number', 'Year Built', 'Public Remarks', 'Parsed Features', 'property_condition', 'price_per_sqft', 'price_diff_from_city_avg', 'monthly_mortgage', 'days_on_market', 'type']
             st.session_state.property_data = pd.read_parquet(io.BytesIO(processed_tabular_parquet), engine="pyarrow", columns=selected_columns)
         except Exception as e:
             st.error(f"Error loading additional property data from S3: {e}")
@@ -348,6 +348,7 @@ def display_property_listing(row, relevance_explanation, relevance_rank, summary
         # Display image if Photo URL exists and is not NaN
         if 'Photo URL' in row and pd.notna(row['Photo URL']) and row['Photo URL'].strip() and is_valid_image(row['Photo URL']):
             st.image(row['Photo URL'], width=400)
+            st.markdown(f"<small><i>{row['caption']}</i></small>", unsafe_allow_html=True)
         else:
             st.image("https://i.imgur.com/Pj9k2Mn.png", width=200)
     
@@ -521,14 +522,16 @@ st.subheader("Find your perfect home with Homiere")
 search = st.text_input("Tell Homiere what you're looking for in a home:", placeholder="Describe anything...", on_change=user_input_changed)
 
 st.markdown("*Optional Filters:*")
-filter_cols = st.columns(4)
+filter_cols = st.columns(5)
 with filter_cols[0]:
     neighborhood_filter = st.selectbox("City", [""] + sorted(st.session_state.map_data["City"].unique()), on_change=user_input_changed)
 with filter_cols[1]:
     price_filter = st.selectbox("Price", ["Any", "$0-500k", "$500k-1M", "$1M-2M", "$2M+"], on_change=user_input_changed)
 with filter_cols[2]:
-    mortgage_filter = st.selectbox("Monthly Mortgage", ["Any", "$0-1k", "$1k-5k", "$5-10k", "10k+"], on_change=user_input_changed)
+    sqft_filter = st.selectbox("Price Relative to City Average", ["Any", "Lower", "At", "Above"], on_change=user_input_changed)
 with filter_cols[3]:
+    mortgage_filter = st.selectbox("Monthly Mortgage", ["Any", "$0-1k", "$1k-5k", "$5-10k", "10k+"], on_change=user_input_changed)
+with filter_cols[4]:
     type_filter = st.selectbox("Home Type", ["Any", "Single Family", "Condo", "Townhouse", "Multi-unit"], on_change=user_input_changed)
 
 filter_cols = st.columns(4)
@@ -545,6 +548,7 @@ data = {
     "description": search,
     "city": neighborhood_filter,
     "price": price_filter,
+    "price_position_vs_city": sqft_filter,
     "home_type": type_filter,
     "bed": beds_filter,
     "bath": baths_filter,

@@ -96,11 +96,13 @@ def translate_filters(user_filters):
         else:
             # Range match: >= lower only
             pinecone_filters['total_bathrooms'] = {"$gte": bathrooms[0]}
-    # additional filters 'city', 'home_type', 'property_condition' can be directly mapped if not 'Any'
+    # additional filters 'city', 'price_position_vs_city', 'home_type', 'property_condition' can be directly mapped if not 'Any'
     if user_filters['city'] not in ["Any", ""]:
         pinecone_filters['city'] = user_filters['city'].title()
     if user_filters['type'] != "Any":
         pinecone_filters['type'] = user_filters['type'].lower()
+    if user_filters['price_position_vs_city'] != "Any":
+        pinecone_filters['price_position_vs_city'] = user_filters['price_position_vs_city'].lower()
     if user_filters['property_condition'] != "Any":
         pinecone_filters['property_condition'] = user_filters['property_condition'].lower()
     return pinecone_filters
@@ -130,19 +132,19 @@ def initialize_pinecone(api_key_path=st.secrets["PINECONE_API_KEY"]):
     return pc
 
 # define a function to check or create index in the vdb with ServerlessSpec
-def get_or_create_index(pc, index_name="test4", vector_dim=3072):
+def get_or_create_index(pc, index_name="homiere-text", vector_dim=3072):
     if index_name not in pc.list_indexes().names():
         pc.create_index(name=index_name, dimension=vector_dim, metric='cosine', spec=ServerlessSpec(cloud="aws", region="us-east-1")) # anything other that us-east-1 requires paid plan
     return pc.Index(index_name)
 
 # define a function to retrieve records in a pinecone index, given a query
-def query_pinecone(pc, query, filter_query, top_k, index_name='test4', vector_dim=3072):
+def query_pinecone(pc, query, filter_query, top_k, index_name='homiere-text', vector_dim=3072):
     # dict mapping the index names to model names and their vector dimensions
     index_to_model = {
         'test1': ('all-mpnet-base-v2', 768),
         'test2': ('all-distilroberta-v1', 768),
         'test3': ('all-MiniLM-L6-v2', 384),
-        'test4': ('text-embedding-3-large', 3072)
+        'homiere-text': ('text-embedding-3-large', 3072)
     }
     model_name, vector_dim = index_to_model.get(index_name, ("Unknown Model", 768))
     # generate query embeddings based on model
@@ -336,15 +338,16 @@ def parse_final_response(llm_response):
         return None
 
 # define the main function to execute retrieval
-def execute_retrieval(input_dict, processed_text_data, index_name='test4', top_k=5, llm_model='llama-3-3', listing_truncation_length_chars=10000, max_output_tokens=4096, generation_length_words=50):
+def execute_retrieval(input_dict, processed_text_data, index_name='homiere-text', top_k=5, llm_model='llama-3-3', listing_truncation_length_chars=10000, max_output_tokens=4096, generation_length_words=50):
     #received_body = input_dict['body']['received_body'] # extract the received body
     received_body = input_dict
     user_query = received_body['description'] # extract the description
     user_filters = { # extract the metadata filters
         "city": received_body['city'],
         "list_price": received_body['price'],
+        "price_position_vs_city": received_body['price_position_vs_city'],
         "type": received_body['home_type'],
-        "total_bedrooms": received_body['bed'],
+        "total_bedrooms": received_body['bed'], 
         "total_bathrooms": received_body['bath'],
         "monthly_mortgage": received_body['mortgage'],
         "property_condition": received_body['home_condition'],

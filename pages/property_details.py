@@ -196,7 +196,7 @@ def load_property_data():
             processed_tabular_response = s3_client.get_object(Bucket=bucket_name, Key=processed_tabular_key)
             processed_tabular_parquet = processed_tabular_response["Body"].read()
             
-            selected_columns = ['List Number', 'Year Built', 'Parsed Features', 'property_condition', 'price_per_sqft', 'price_diff_from_city_avg', 'monthly_mortgage', 'days_on_market', 'type']
+            selected_columns = ['List Number', 'Year Built', 'Public Remarks', 'Parsed Features', 'property_condition', 'price_per_sqft', 'price_diff_from_city_avg', 'monthly_mortgage', 'days_on_market', 'type']
             st.session_state.property_data = pd.read_parquet(io.BytesIO(processed_tabular_parquet), engine="pyarrow", columns=selected_columns)
         except Exception as e:
             st.error(f"Error loading additional property data from S3: {e}")
@@ -204,7 +204,7 @@ def load_property_data():
 
 if "property_data" not in st.session_state:
     load_property_data()
-
+      
 # Check if property is selected
 if "selected_listing_id" not in st.session_state:
     st.error("No property selected. Please go back and select a property from the search results.")
@@ -237,7 +237,8 @@ else:
 
             # For additional data loading for property details
             year_built = safe_int(additional_property_data.get('Year Built', 0))
-            property_condition = additional_property_data.get('property_condition', 'No Condition')
+            public_remarks = additional_property_data.get('Public Remarks', 'No Remarks on Property')
+            property_condition = additional_property_data.get('property_condition', 'No Condition').title()
             price_per_sqft = round(safe_int(additional_property_data.get('price_per_sqft', 0)), 2)
             price_diff_from_city_avg = round(safe_int(additional_property_data.get('price_diff_from_city_avg', 0)), 2)
             monthly_mortgage = round(safe_int(additional_property_data.get('monthly_mortgage', 0)), 2)
@@ -283,9 +284,9 @@ else:
 
                     st.markdown("<hr>", unsafe_allow_html=True)
 
-                    st.markdown("### **Property Summary**")
-                    st.write(f"{summary}")
-
+                    st.markdown("### **Property Description**")
+                    st.write(f"{public_remarks}")
+                    
                     st.markdown("<hr>", unsafe_allow_html=True)
                 
                 with property_tab:
