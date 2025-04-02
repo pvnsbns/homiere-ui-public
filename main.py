@@ -99,7 +99,7 @@ def load_map_data():
             processed_tabular_response = s3_client.get_object(Bucket=bucket_name, Key=processed_tabular_key)
             processed_tabular_parquet = processed_tabular_response["Body"].read()
             
-            selected_columns = ['Geo Latitude', 'Geo Longitude', 'List Number', 'Address', 'City', 'State', 'Zip', 'Total Sqft', 'List Price', 'Total Bedrooms', 'Total Bathrooms', 'Photo URL', 'caption']
+            selected_columns = ['Geo Latitude', 'Geo Longitude', 'List Number', 'Address', 'City', 'State', 'Zip', 'Total Sqft', 'List Price', 'Total Bedrooms', 'Total Bathrooms', 'Photo URL', 'human_caption']
             st.session_state.map_data = pd.read_parquet(io.BytesIO(processed_tabular_parquet), engine="pyarrow", columns=selected_columns)
         except Exception as e:
             st.error(f"Error loading map data from S3: {e}")
@@ -348,7 +348,7 @@ def display_property_listing(row, relevance_explanation, relevance_rank, summary
         # Display image if Photo URL exists and is not NaN
         if 'Photo URL' in row and pd.notna(row['Photo URL']) and row['Photo URL'].strip() and is_valid_image(row['Photo URL']):
             st.image(row['Photo URL'], width=400)
-            st.markdown(f"<small><i>{row['caption']}</i></small>", unsafe_allow_html=True)
+            st.markdown(f"<small><i>{row['human_caption']}</i></small>", unsafe_allow_html=True)
         else:
             st.image("https://i.imgur.com/Pj9k2Mn.png", width=200)
     
