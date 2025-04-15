@@ -8,9 +8,12 @@ import pydeck as pdk
 import boto3
 import io
 import random
+import folium
 from io import StringIO
 from PIL import Image
-
+from streamlit_folium import st_folium
+from folium import Icon
+from folium.plugins import MarkerCluster
 
 # Page config
 st.set_page_config(
@@ -31,6 +34,106 @@ st.set_page_config(
         """
     }
 )
+
+# Add custom CSS to match the logo color
+st.markdown("""
+<style>
+    /* Main colors from the HOMIERE logo */
+    :root {
+        --primary-dark: #722F37;    /* Deep burgundy */
+        --primary-medium: #8B4539;  /* Medium burgundy/brown */
+        --primary-light: #A06A45;   /* Light brown */
+        --accent-cream: #F9F6F2;    /* Light cream background */
+        --text-dark: #2C2C2C;       /* Dark text */
+    }
+    
+    /* Global text colors */
+    body {
+        color: var(--text-dark);
+    }
+    
+    /* Headings */
+    h1, h2, h3, h4, h5, h6 {
+        color: var(--primary-dark);
+    }
+    
+    /* Buttons */
+    .stButton > button {
+        background-color: var(--primary-dark);
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+    .stButton > button:hover {
+        background-color: var(--primary-light);
+    }
+    .stButton > button:active {
+        background-color: var(--primary-medium);
+    }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: var(--accent-cream);
+        border-right: 1px solid #E0D1C0;
+    }
+    [data-testid="stSidebar"] hr {
+        border-color: var(--primary-light);
+    }
+    
+    /* Cards and info boxes */
+    .info-box {
+        background-color: var(--accent-cream);
+        border-left: 4px solid var(--primary-dark);
+        padding: 15px;
+        border-radius: 4px;
+        margin: 15px 0;
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: var(--accent-cream);
+        border-radius: 4px 4px 0 0;
+        padding: 10px 16px;
+        color: var(--primary-medium);
+    }
+    .stTabs [data-baseweb="tab-highlight"] {
+        background-color: var(--primary-dark);
+    }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        color: var(--primary-dark);
+        font-weight: bold;
+    }
+    
+    /* Inputs */
+    input[type="text"], input[type="number"], select, textarea {
+        border-radius: 4px;
+        border: 1px solid #E0D1C0;
+    }
+    input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
+        border-color: var(--primary-medium);
+        box-shadow: 0 0 0 1px var(--primary-light);
+    }
+    
+    /* Sliders */
+    .stSlider [data-baseweb="slider"] [data-testid="stThumbValue"] {
+        background-color: var(--primary-dark);
+        color: white;
+    }
+    
+    /* Dividers with gradient */
+    hr {
+        height: 2px;
+        border: none;
+        background: linear-gradient(to right, var(--primary-dark), var(--primary-light), var(--accent-cream));
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Sidebar setup
 st.sidebar.image("./images/homiere_logo.png", width=300)
@@ -139,7 +242,10 @@ def load_property_data():
             processed_tabular_response = s3_client.get_object(Bucket=bucket_name, Key=processed_tabular_key)
             processed_tabular_parquet = processed_tabular_response["Body"].read()
             
-            selected_columns = ['List Number', 'Year Built', 'Public Remarks', 'Parsed Features', 'property_condition', 'price_per_sqft', 'price_diff_from_city_avg', 'monthly_mortgage', 'days_on_market', 'type']
+            selected_columns = ['List Number', 'Year Built', 'Public Remarks', 'Parsed Features', 'property_condition', 'price_per_sqft', 'price_diff_from_city_avg', 'monthly_mortgage', 'days_on_market', 'type',
+                                'Violent Crime per 1000','Violent Crime Category', 'Property Crime per 1000', 'Property Crime Category',
+                                'walk_score', 'bike_score', 'transit_score', 'walk_category', 'bike_category', 'transit_category',
+                                'Elementary_School_Rating', 'Middle_School_Rating', 'High_School_Rating']
             st.session_state.property_data = pd.read_parquet(io.BytesIO(processed_tabular_parquet), engine="pyarrow", columns=selected_columns)
         except Exception as e:
             st.error(f"Error loading additional property data from S3: {e}")
@@ -260,7 +366,7 @@ def render_map(map_data):
         st.pydeck_chart(r, use_container_width=True)
     else:
         st.write("No properties to display in this area.")
-
+        
 # Function to search properties by address or list number
 def search_properties(properties_df, search_term):
     if not search_term:
@@ -508,7 +614,114 @@ def display_paginated_listings(properties_df, summaries, relevance_explanations,
     
     # Return the current display data for use in the map
     return st.session_state[search_results_key] if st.session_state[search_results_key] is not None else properties_df
-    
+
+def render_map_search(map_data):
+    if not map_data.empty:
+        map_data = pd.DataFrame([
+            {
+                'lat': row.get('Geo Latitude', 0),
+                'lon': row.get('Geo Longitude', 0),
+                'List Number': row.get('List Number', ''),
+                'Address': row.get('Address', ''),
+                'City': row.get('City', ''),
+                'State': row.get('State', ''),
+                'Zip': row.get('Zip', ''),
+                'List Price': row.get('List Price', 0),
+                'Total Bedrooms': row.get('Total Bedrooms', 0),
+                'Total Bathrooms': row.get('Total Bathrooms', 0),
+                'Total Sqft': row.get('Total Sqft', 0),
+                'Photo URL': row.get('Photo URL', ''),
+            }
+            for _, row in map_data.iterrows()
+        ])
+
+        center_lat = map_data['lat'].mean()
+        center_lon = map_data['lon'].mean()
+
+        lat_range = map_data['lat'].max() - map_data['lat'].min()
+        lon_range = map_data['lon'].max() - map_data['lon'].min()
+        max_range = max(lat_range, lon_range)
+
+        if max_range > 0.5:
+            zoom_level = 8
+        elif max_range > 0.2:
+            zoom_level = 9
+        elif max_range > 0.05:
+            zoom_level = 10
+        elif max_range > 0.01:
+            zoom_level = 11
+        else:
+            zoom_level = 12
+
+        if len(map_data) == 1:
+            zoom_level = 13
+        
+        m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_level, control_scale=True)
+
+        icon_create_function = """
+        function(cluster) {
+            return L.divIcon({
+                html: '<div style="background-color: darkred; color: white; font-size: 12px; text-align: center; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;"><b>' + cluster.getChildCount() + '</b></div>',
+                className: '',
+                iconSize: new L.Point(30, 30)
+            });
+        }
+        """
+
+        marker_cluster = MarkerCluster(
+            icon_create_function=icon_create_function
+        ).add_to(m)
+        
+        for _, row in map_data.iterrows():
+            lat = row['lat']
+            lon = row['lon']
+            list_number = row['List Number']
+
+            photo_url = row['Photo URL'].strip() if pd.notna(row['Photo URL']) and row['Photo URL'].strip() else "https://i.imgur.com/Pj9k2Mn.png"
+
+            tooltip_html = f"""
+                <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 5px;">
+                    <div style="font-weight: bold; font-size: 13px;">
+                        {row['Address']}, {row['City']}, {row['State']} {row['Zip']}
+                    </div>
+                    <div style="font-size: 13px;">
+                        <b>${safe_int(row['List Price']):,}</b> - {safe_int(row['Total Bedrooms'])} bd | 
+                        {safe_int(row['Total Bathrooms'])} ba | {safe_int(row['Total Sqft'])} sqft
+                    </div>
+                    <img src="{photo_url}" width="250" height="200" style="object-fit: cover; border-radius: 4px; margin-top: 4px;">
+                </div>
+            """
+            
+            custom_icon = Icon(
+                icon="home",
+                icon_color="white",
+                color="darkred",
+            )
+
+            marker = folium.Marker(
+                location=[lat, lon],
+                icon=custom_icon,
+                tooltip=tooltip_html,
+            )
+
+            marker.add_child(folium.Popup(tooltip_html, max_width=300))
+            marker.add_to(marker_cluster)
+
+        map_result = st_folium(m, width=700, height=500, returned_objects=["last_object_clicked"])
+
+        if map_result and map_result.get("last_object_clicked"):
+            clicked_lat = map_result["last_object_clicked"]["lat"]
+            clicked_lon = map_result["last_object_clicked"]["lng"]
+
+            clicked_row = map_data[
+                (map_data["lat"] == clicked_lat) & (map_data["lon"] == clicked_lon)
+            ]
+
+            if not clicked_row.empty:
+                property_data = clicked_row.iloc[0]
+                st.session_state.selected_listing_id = property_data["List Number"]
+                st.switch_page("pages/property_details.py")
+
 # for i, button in enumerate(st.session_state.listing_buttons_list):
 #     if button:
 #         # st.write(f"{i} button was clicked")
@@ -519,7 +732,7 @@ def user_input_changed():
 
 
 st.subheader("Find your perfect home with Homiere")
-search = st.text_input("Tell Homiere what you're looking for in a home:", placeholder="Describe anything...", on_change=user_input_changed)
+search = st.text_input("Tell Homiere what you're looking for in a home:", placeholder="Describe your ideal home as broad or specific—e.g., 'A Spanish-style house with a spacious corner lot and a city view.'", on_change=user_input_changed)
 
 st.markdown("*Optional Filters:*")
 filter_cols = st.columns(5)
@@ -528,7 +741,7 @@ with filter_cols[0]:
 with filter_cols[1]:
     price_filter = st.selectbox("Price", ["Any", "$0-500k", "$500k-1M", "$1M-2M", "$2M+"], on_change=user_input_changed)
 with filter_cols[2]:
-    sqft_filter = st.selectbox("Price Relative to City Average", ["Any", "Lower", "At", "Above"], on_change=user_input_changed)
+    sqft_filter = st.selectbox("Price Relative to City Average", ["Any", "Below", "At", "Above"], on_change=user_input_changed)
 with filter_cols[3]:
     mortgage_filter = st.selectbox("Monthly Mortgage", ["Any", "$0-1k", "$1k-5k", "$5-10k", "10k+"], on_change=user_input_changed)
 with filter_cols[4]:
@@ -582,7 +795,8 @@ if st.session_state.properties_df is not None:
             
             with map_col:
                 st.markdown("### Map View")
-                render_map(st.session_state.properties_df)
+                
+                render_map_search(st.session_state.properties_df)
             
             with list_col:
                 st.markdown("### Properties")
@@ -630,7 +844,7 @@ if st.button("Submit"):
                 load_text_data()
 
             if response.status_code == 200:
-                st.success("Data successfully submitted!")
+                # st.success("Data successfully submitted!")
 
                 # Filter the properties based on the search criteria
                 # import random
@@ -722,7 +936,7 @@ if st.button("Submit"):
                     
                     with map_col:
                         st.markdown("### Map View")
-                        render_map(st.session_state.properties_df)
+                        render_map_search(st.session_state.properties_df)
                     
                     with list_col:
                         st.markdown("### Properties")
@@ -730,7 +944,7 @@ if st.button("Submit"):
                         display_scrollable_listings(st.session_state.properties_df, summaries, relevance_explanations, relevance_ranks, section_id="scrollable_view")
                     
                 else:
-                    st.info("No properties match your search criteria.")
+                    st.info("No property criteria described. Showing properties based on filters.")
 
             else:
                 st.error(f"Failed to send data. Status code: {response.status_code}")

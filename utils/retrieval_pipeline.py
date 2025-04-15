@@ -47,10 +47,13 @@ def translate_filters(user_filters):
         price_range = price_map.get(user_filters['list_price'])
         if price_range:
             lower, upper = price_range
-            if lower:
-                pinecone_filters['list_price'] = {"$gte": lower}
-            if upper:
-                pinecone_filters['list_price'] = {"$lt": upper}
+            price_conditions = {}
+            if lower is not None:
+                price_conditions["$gte"] = lower
+            if upper is not None:
+                price_conditions["$lt"] = upper
+            if price_conditions:
+                pinecone_filters['list_price'] = price_conditions
     monthly_mortgage_map = {"$0-1k": (0, 1000), "$1k-5k": (1000, 5000), "$5-10k": (5000, 10000), "10k+": (10000, None)} # map monthly mortgages to numeric ranges
     # price filter
     if user_filters['monthly_mortgage'] != "Any":
